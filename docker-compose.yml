@@ -1,0 +1,28 @@
+services:
+  otp:
+    image: opentripplanner/opentripplanner:2.6.0
+    container_name: otp
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./otp:/var/otp
+      - ./data:/var/otp/data
+    command: >
+      --build --save --load
+      /var/otp/graph
+      --serve
+      /var/otp/graph
+      --port 8080
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    container_name: hk-transit-optimizer
+    environment:
+      OTP_BASE_URL: "http://otp:8080"
+      NOMINATIM_BASE_URL: "https://nominatim.openstreetmap.org"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - otp
+    restart: unless-stopped
