@@ -2,17 +2,13 @@ services:
   otp:
     image: opentripplanner/opentripplanner:2.6.0
     container_name: otp
+    environment:
+      JAVA_OPTS: "-Xmx6G"
     ports:
       - "8080:8080"
     volumes:
-      - ./otp:/var/otp
-      - ./data:/var/otp/data
-    command: >
-      --build --save --load
-      /var/otp/graph
-      --serve
-      /var/otp/graph
-      --port 8080
+      - ./data:/var/opentripplanner
+    command: ["--build","--save","--serve","--port","8080"]
     restart: unless-stopped
 
   server:
