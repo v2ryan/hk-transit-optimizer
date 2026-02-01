@@ -146,7 +146,7 @@ app.post('/api/optimize', async (req, res) => {
       '尖沙咀碼頭': 'Tsim Sha Tsui Ferry Pier, Hong Kong',
       '觀塘 apm': 'apm Kwun Tong, Hong Kong',
       '觀塘APM': 'apm Kwun Tong, Hong Kong',
-      '藍田匯景': 'Laguna City, Lam Tin, Hong Kong'
+      '藍田匯景': 'Laguna City, Hong Kong'
     };
 
     // Geocode all points (rate-limit friendly)
