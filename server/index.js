@@ -29,7 +29,7 @@ app.get('/', (_req, res) => {
 <div class="hint">輸入 5 個地點（每行一個）。系統會用 OpenTripPlanner 計算公共交通時間矩陣，然後用暴力枚舉（5!=120）找最短總時間順序。</div>
 <div class="row">
   <label>出發點：</label>
-  <input id="origin" value="黃大仙站A2" style="flex:1;min-width:220px;" />
+  <input id="origin" value="Wong Tai Sin Station, Hong Kong" style="flex:1;min-width:220px;" />
   <button id="btn">計算</button>
 </div>
 <textarea id="dest">大埔中心\n沙田好運中心\n尖沙咀碼頭\n觀塘 apm\n藍田匯景</textarea>
@@ -39,7 +39,7 @@ app.get('/', (_req, res) => {
   const out=document.getElementById('out');
   btn.onclick=async()=>{
     out.textContent='計算中…（第一次可能較慢）';
-    const origin=document.getElementById('origin').value.trim();
+    const origin=document.getElementById('origin').value.trim() || 'Wong Tai Sin Station, Hong Kong';
     const dest=document.getElementById('dest').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
     const res=await fetch('/api/optimize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({origin, destinations: dest})});
     const json=await res.json();
@@ -136,13 +136,27 @@ app.post('/api/optimize', async (req, res) => {
       return res.status(400).json({error: 'Need origin + exactly 5 destinations'});
     }
 
+    const ALIASES = {
+      // Start
+      '黃大仙站A2': 'Wong Tai Sin Station, Hong Kong',
+      '黃大仙站': 'Wong Tai Sin Station, Hong Kong',
+      // Destinations
+      '大埔中心': 'Tai Po Centre, Hong Kong',
+      '沙田好運中心': 'Lucky Plaza, Sha Tin, Hong Kong',
+      '尖沙咀碼頭': 'Tsim Sha Tsui Ferry Pier, Hong Kong',
+      '觀塘 apm': 'apm Kwun Tong, Hong Kong',
+      '觀塘APM': 'apm Kwun Tong, Hong Kong',
+      '藍田匯景': 'Laguna City, Lam Tin, Hong Kong'
+    };
+
     // Geocode all points (rate-limit friendly)
     const labels = [origin, ...destinations];
     const points = [];
     for (const label of labels) {
-      const p = await geocode(label);
-      points.push({ label, ...p });
-      await sleep(250); // be gentle to Nominatim
+      const q = ALIASES[label] || label;
+      const p = await geocode(q);
+      points.push({ label, query: q, ...p });
+      await sleep(350); // be gentle to Nominatim
     }
 
     // Build duration matrix using OTP (6x6)
