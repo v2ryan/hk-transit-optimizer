@@ -53,31 +53,6 @@ app.get('/', (_req, res) => {
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
-const FIXED_POINTS = {
-  // Snap key POIs to nearby MTR stations (for MTR routing fallback)
-  'Wong Tai Sin Station, Hong Kong': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
-  '黃大仙': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
-  '黃大仙站': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
-  '黃大仙站A2': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
-
-  'apm, Kwun Tong, Hong Kong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (for apm)' },
-  'apm, Kwun Tong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (for apm)' },
-  '觀塘 apm': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (for apm)' },
-
-  'Sceneway Garden, Lam Tin, Hong Kong': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
-  'Sceneway Garden, Lam Tin': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
-  '匯景花園': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
-  '藍田匯景': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
-
-  'Lucky Plaza, Sha Tin, Hong Kong': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (for Lucky Plaza)' },
-  'Lucky Plaza, Sha Tin': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (for Lucky Plaza)' },
-  '沙田好運中心': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (for Lucky Plaza)' },
-
-  'Tai Po Centre, Hong Kong': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (for Tai Po Centre)' },
-  'Tai Po Centre, Tai Po': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (for Tai Po Centre)' },
-  '大埔中心': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (for Tai Po Centre)' }
-};
-
 const FIXED_STATIONS = {
   'Wong Tai Sin Station, Hong Kong': 'MTR-WTS',
   '黃大仙': 'MTR-WTS',
@@ -126,9 +101,8 @@ async function geocode(q) {
   };
 }
 
-async function resolvePoint(label, query) {
-  const fixed = FIXED_POINTS[label] || FIXED_POINTS[query];
-  if (fixed) return { lat: fixed.lat, lon: fixed.lon, display: fixed.display };
+async function resolvePoint(_label, query) {
+  // Keep POI coordinates for bus routing; stationId is used separately for MTR fallback.
   return geocode(query);
 }
 

@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import JSZip from 'jszip';
+import { parseCsv } from './csv.js';
 
 function haversineMeters(a, b) {
   const R = 6371000;
@@ -39,17 +40,7 @@ export class MtrRouter {
       const f = zip.file(name);
       if (!f) throw new Error(`MTR GTFS missing ${name}`);
       const text = await f.async('string');
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      const header = lines[0].split(',');
-      const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
-      const rows = [];
-      for (const line of lines.slice(1)) {
-        const parts = line.split(',');
-        const row = {};
-        for (const h of header) row[h] = parts[idx[h]] ?? '';
-        rows.push(row);
-      }
-      return rows;
+      return parseCsv(text);
     };
 
     const routes = await readCsv('routes.txt');
@@ -100,6 +91,8 @@ export class MtrRouter {
         const dt = b.arrSec - a.depSec;
         if (!(dt > 0 && dt < 3600)) continue;
         addEdge(this._edges, a.stopId, b.stopId, dt);
+        // also add reverse with same weight as fallback (some feeds may only be one-directional per trip)
+        addEdge(this._edges, b.stopId, a.stopId, dt);
       }
     }
 
