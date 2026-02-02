@@ -11,12 +11,12 @@ const MTR_GTFS_URL = process.env.MTR_GTFS_URL || 'https://feed.justusewheels.com
 
 const mtr = new MtrRouter({
   gtfsUrl: MTR_GTFS_URL,
-  waitSec: Number(process.env.MTR_WAIT_SEC || 120),
+  waitSec: Number(process.env.MTR_WAIT_SEC || 60),
   xferSec: Number(process.env.MTR_XFER_SEC || 120),
   tstEtsSec: Number(process.env.MTR_TST_ETS_SEC || 420)
 });
 
-const MTR_PENALTY_SEC = Number(process.env.MTR_PENALTY_SEC || 180); // discourage all-MTR solutions
+const MTR_PENALTY_SEC = Number(process.env.MTR_PENALTY_SEC || 300); // discourage all-MTR solutions
 
 
 // Simple, static UI
