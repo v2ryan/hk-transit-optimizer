@@ -61,6 +61,30 @@ app.get('/', (_req, res) => {
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const s = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+function walkPlan(from, to) {
+  const distM = haversineMeters(from, to);
+  // Assume 1.2 m/s walking speed
+  const durationSec = Math.round(distM / 1.2);
+  return {
+    durationSec,
+    legs: [
+      { mode: 'WALK', route: null, from: 'Origin', to: 'Destination', durationSec }
+    ]
+  };
+}
+
+
 const FIXED_STATIONS = {
   // MTR station codes (used to select platform stops in GTFS)
   'Wong Tai Sin Station, Hong Kong': 'WTS',
@@ -307,43 +331,55 @@ app.post('/api/optimize', async (req, res) => {
       for (let j=0;j<n;j++) {
         if (i===j) continue;
         const key = `${i}-${j}`;
-        // Hybrid: try bus via OTP, and MTR via GTFS graph if stations are known.
+        // Hybrid: consider walking, bus via OTP, and MTR via GTFS graph.
         let bestPlan = null;
+
+        // 0) Walking-only candidate for very close points (or when everything else is bad)
+        const walk = walkPlan(points[i], points[j]);
+        // If within ~1.2km, strongly prefer walking.
+        const distM = haversineMeters(points[i], points[j]);
+        if (distM <= 1200) bestPlan = walk;
 
         // 1) Bus/other via OTP (may fail for some OD pairs)
         try {
           const p1 = await otpPlan(points[i], points[j]);
-          bestPlan = p1;
+          if (!bestPlan || p1.durationSec < bestPlan.durationSec) bestPlan = p1;
         } catch (_e) {
           // ignore
         }
 
-        // 2) MTR fallback (only if both have stationId)
+        // 2) MTR option (only if both have stationId)
         if (points[i].stationId && points[j].stationId) {
           try {
-            const p2raw = await mtr.plan({
-              from: { lat: points[i].lat, lon: points[i].lon },
-              to: { lat: points[j].lat, lon: points[j].lon },
-              fromStationCode: points[i].stationId,
-              toStationCode: points[j].stationId
-            });
-            if (p2raw) {
-              // Apply penalty so the optimizer won't choose MTR for every leg unless it's clearly faster.
-              const extra = MTR_PENALTY_SEC + (
-                // Prefer 215X-ish cross-harbour bus from Lam Tin area to TST/ETS
-                ((points[i].stationId === 'LAT' && points[j].stationId === 'ETS') || (points[i].stationId === 'ETS' && points[j].stationId === 'LAT'))
-                  ? 300
-                  : 0
-              );
-              const p2 = { ...p2raw, durationSec: p2raw.durationSec + extra };
-              if (!bestPlan || p2.durationSec < bestPlan.durationSec) bestPlan = p2;
+            // If same station code, don't force MTR; walking within station is more realistic.
+            if (points[i].stationId === points[j].stationId) {
+              // keep bestPlan as-is (likely walk)
+            } else {
+              const p2raw = await mtr.plan({
+                from: { lat: points[i].lat, lon: points[i].lon },
+                to: { lat: points[j].lat, lon: points[j].lon },
+                fromStationCode: points[i].stationId,
+                toStationCode: points[j].stationId
+              });
+              if (p2raw) {
+                // Apply penalty so the optimizer won't choose MTR for every leg unless it's clearly faster.
+                const extra = MTR_PENALTY_SEC + (
+                  ((points[i].stationId === 'LAT' && points[j].stationId === 'ETS') || (points[i].stationId === 'ETS' && points[j].stationId === 'LAT'))
+                    ? 300
+                    : 0
+                );
+                const p2 = { ...p2raw, durationSec: p2raw.durationSec + extra };
+                if (!bestPlan || p2.durationSec < bestPlan.durationSec) bestPlan = p2;
+              }
             }
           } catch (_e) {
             // ignore
           }
         }
 
-        if (!bestPlan) throw new Error('no route (OTP+MTR)');
+        // Fallback: allow walking even if far, if OTP is down and MTR not available.
+        if (!bestPlan) bestPlan = walk;
+
         matrix[i][j] = Math.round(bestPlan.durationSec);
         legsMap[key] = bestPlan.legs;
         await sleep(80);
