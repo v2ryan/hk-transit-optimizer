@@ -1,11 +1,15 @@
 import express from 'express';
 import fetch from 'node-fetch';
+import { MtrRouter } from './mtr.js';
 
 const app = express();
 app.use(express.json({limit: '1mb'}));
 
 const OTP_BASE_URL = process.env.OTP_BASE_URL || 'http://localhost:8080';
 const NOMINATIM_BASE_URL = process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
+const MTR_GTFS_URL = process.env.MTR_GTFS_URL || 'https://feed.justusewheels.com/hk.gtfs.zip';
+
+const mtr = new MtrRouter({ gtfsUrl: MTR_GTFS_URL, waitSec: Number(process.env.MTR_WAIT_SEC || 180) });
 
 // Simple, static UI
 app.get('/', (_req, res) => {
@@ -50,28 +54,53 @@ app.get('/', (_req, res) => {
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
 const FIXED_POINTS = {
-  // Prefer GTFS/MTR station coordinates to ensure OTP can snap to transit network
-  'Wong Tai Sin Station, Hong Kong': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
-  '黃大仙': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
-  '黃大仙站': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
-  '黃大仙站A2': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
+  // Snap key POIs to nearby MTR stations (for MTR routing fallback)
+  'Wong Tai Sin Station, Hong Kong': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
+  '黃大仙': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
+  '黃大仙站': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
+  '黃大仙站A2': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin' },
 
-  'apm, Kwun Tong, Hong Kong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (GTFS, for apm)' },
-  'apm, Kwun Tong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (GTFS, for apm)' },
-  '觀塘 apm': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (GTFS, for apm)' },
+  'apm, Kwun Tong, Hong Kong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (for apm)' },
+  'apm, Kwun Tong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (for apm)' },
+  '觀塘 apm': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (for apm)' },
 
-  'Sceneway Garden, Lam Tin, Hong Kong': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
-  'Sceneway Garden, Lam Tin': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
-  '匯景花園': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
-  '藍田匯景': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
+  'Sceneway Garden, Lam Tin, Hong Kong': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
+  'Sceneway Garden, Lam Tin': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
+  '匯景花園': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
+  '藍田匯景': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (for Sceneway Garden)' },
 
-  'Lucky Plaza, Sha Tin, Hong Kong': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (GTFS, for Lucky Plaza)' },
-  'Lucky Plaza, Sha Tin': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (GTFS, for Lucky Plaza)' },
-  '沙田好運中心': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (GTFS, for Lucky Plaza)' },
+  'Lucky Plaza, Sha Tin, Hong Kong': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (for Lucky Plaza)' },
+  'Lucky Plaza, Sha Tin': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (for Lucky Plaza)' },
+  '沙田好運中心': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (for Lucky Plaza)' },
 
-  'Tai Po Centre, Hong Kong': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (GTFS, for Tai Po Centre)' },
-  'Tai Po Centre, Tai Po': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (GTFS, for Tai Po Centre)' },
-  '大埔中心': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (GTFS, for Tai Po Centre)' }
+  'Tai Po Centre, Hong Kong': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (for Tai Po Centre)' },
+  'Tai Po Centre, Tai Po': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (for Tai Po Centre)' },
+  '大埔中心': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (for Tai Po Centre)' }
+};
+
+const FIXED_STATIONS = {
+  'Wong Tai Sin Station, Hong Kong': 'MTR-WTS',
+  '黃大仙': 'MTR-WTS',
+  '黃大仙站': 'MTR-WTS',
+  '黃大仙站A2': 'MTR-WTS',
+
+  'apm, Kwun Tong, Hong Kong': 'MTR-KWT',
+  'apm, Kwun Tong': 'MTR-KWT',
+  '觀塘 apm': 'MTR-KWT',
+
+  'Sceneway Garden, Lam Tin, Hong Kong': 'MTR-LAT',
+  'Sceneway Garden, Lam Tin': 'MTR-LAT',
+  '匯景花園': 'MTR-LAT',
+  '藍田匯景': 'MTR-LAT',
+
+  '尖沙咀碼頭': 'MTR-TST',
+  'Tsim Sha Tsui Ferry Pier, Hong Kong': 'MTR-TST',
+
+  '沙田好運中心': 'MTR-SHT',
+  'Lucky Plaza, Sha Tin, Hong Kong': 'MTR-SHT',
+
+  '大埔中心': 'MTR-TAP',
+  'Tai Po Centre, Hong Kong': 'MTR-TAP'
 };
 
 async function geocode(q) {
@@ -103,24 +132,36 @@ async function resolvePoint(label, query) {
   return geocode(query);
 }
 
+function stationIdFor(label, query) {
+  return FIXED_STATIONS[label] || FIXED_STATIONS[query] || null;
+}
+
 async function otpPlan(from, to) {
-  // OTP /plan
+  // OTP /plan (bus-only graph)
   const url = new URL('/otp/routers/default/plan', OTP_BASE_URL);
   url.searchParams.set('fromPlace', `${from.lat},${from.lon}`);
   url.searchParams.set('toPlace', `${to.lat},${to.lon}`);
   url.searchParams.set('mode', 'WALK,TRANSIT');
-  url.searchParams.set('numItineraries', '5');
-  // Use a daytime time-of-day to avoid "no service" (e.g. early morning)
+  url.searchParams.set('numItineraries', '3');
   const now = new Date();
   url.searchParams.set('date', now.toISOString().slice(0,10));
   url.searchParams.set('time', '12:00');
 
-  const res = await fetch(url);
-  const json = await res.json();
-  if (!res.ok) throw new Error(`otp plan failed: ${res.status} ${JSON.stringify(json).slice(0,200)}`);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 12000);
+  let res;
+  try {
+    res = await fetch(url, { signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { json = null; }
+  if (!res.ok) throw new Error(`otp plan failed: ${res.status} ${String(text).slice(0,200)}`);
   const itins = json?.plan?.itineraries || [];
   if (!itins.length) throw new Error(`otp no itinerary`);
-  // Pick the fastest itinerary
   const itin = itins.reduce((best, cur) => (!best || cur.duration < best.duration ? cur : best), null);
   return {
     durationSec: itin.duration,
@@ -258,7 +299,8 @@ app.post('/api/optimize', async (req, res) => {
     for (const label of labels) {
       const q = ALIASES[label] || label;
       const p = await resolvePoint(label, q);
-      points.push({ label, query: q, ...p });
+      const stationId = stationIdFor(label, q);
+      points.push({ label, query: q, stationId, ...p });
       await sleep(350); // be gentle to Nominatim
     }
 
@@ -271,10 +313,36 @@ app.post('/api/optimize', async (req, res) => {
       for (let j=0;j<n;j++) {
         if (i===j) continue;
         const key = `${i}-${j}`;
-        const plan = await otpPlan(points[i], points[j]);
-        matrix[i][j] = Math.round(plan.durationSec);
-        legsMap[key] = plan.legs;
-        await sleep(120);
+        // Hybrid: try bus via OTP, and MTR via GTFS graph if stations are known.
+        let bestPlan = null;
+
+        // 1) Bus/other via OTP (may fail for some OD pairs)
+        try {
+          const p1 = await otpPlan(points[i], points[j]);
+          bestPlan = p1;
+        } catch (_e) {
+          // ignore
+        }
+
+        // 2) MTR fallback (only if both have stationId)
+        if (points[i].stationId && points[j].stationId) {
+          try {
+            const p2 = await mtr.plan({
+              from: { lat: points[i].lat, lon: points[i].lon },
+              to: { lat: points[j].lat, lon: points[j].lon },
+              fromStopId: points[i].stationId,
+              toStopId: points[j].stationId
+            });
+            if (p2 && (!bestPlan || p2.durationSec < bestPlan.durationSec)) bestPlan = p2;
+          } catch (_e) {
+            // ignore
+          }
+        }
+
+        if (!bestPlan) throw new Error('no route (OTP+MTR)');
+        matrix[i][j] = Math.round(bestPlan.durationSec);
+        legsMap[key] = bestPlan.legs;
+        await sleep(80);
       }
     }
 
