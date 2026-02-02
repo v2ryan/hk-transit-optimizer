@@ -22,6 +22,10 @@ app.get('/', (_req, res) => {
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;}
   pre{background:#f6f8fa;padding:12px;border-radius:8px;overflow:auto;}
   .hint{color:#555;font-size:13px;}
+  .out{background:#f6f8fa;padding:12px;border-radius:8px;white-space:pre-wrap;}
+  .seg{margin:10px 0;padding:10px;border:1px solid #eee;border-radius:10px;}
+  .seg-title{font-weight:800;}
+  .muted{color:#555;font-size:13px;}
 </style>
 </head>
 <body>
@@ -33,38 +37,12 @@ app.get('/', (_req, res) => {
   <button id="btn">計算</button>
 </div>
 <textarea id="dest">大埔中心\n沙田好運中心\n尖沙咀碼頭\n觀塘 apm\n藍田匯景</textarea>
-<pre id="out">(結果會喺呢度顯示)</pre>
-<script>
-  const btn=document.getElementById('btn');
-  const out=document.getElementById('out');
-  btn.onclick=async()=>{
-    try {
-      btn.disabled = true;
-      out.textContent='計算中…（第一次可能較慢，約 10–60 秒）';
-      const origin=document.getElementById('origin').value.trim() || 'Wong Tai Sin Station, Hong Kong';
-      const dest=document.getElementById('dest').value.split(/\\n+/).map(s=>s.trim()).filter(Boolean);
-      if (dest.length !== 5) {
-        out.textContent = '請輸入 5 個地點（每行一個）。目前：' + dest.length;
-        return;
-      }
-      const res=await fetch('/api/optimize',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({origin, destinations: dest})
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        out.textContent = 'API error ' + res.status + ':\\n' + text;
-        return;
-      }
-      out.textContent = JSON.stringify(JSON.parse(text), null, 2);
-    } catch (e) {
-      out.textContent = '前端錯誤：' + (e?.stack || e);
-    } finally {
-      btn.disabled = false;
-    }
-  };
-</script>
+<div id="out" class="out">(結果會喺呢度顯示)</div>
+<details style="margin-top:12px;">
+  <summary>顯示原始 JSON</summary>
+  <pre id="raw"></pre>
+</details>
+<script src="/app.js"></script>
 </body>
 </html>`);
 });
@@ -147,6 +125,79 @@ function permutations(arr) {
   }
   return res;
 }
+
+app.get('/app.js', (_req, res) => {
+  // Note: Avoid JS template literals here to prevent escaping bugs.
+  res.type('js').send(
+    "(function(){\n" +
+    "  const btn = document.getElementById('btn');\n" +
+    "  const out = document.getElementById('out');\n" +
+    "  const raw = document.getElementById('raw');\n\n" +
+    "  function secToMin(s){ return Math.round((Number(s)||0)/60); }\n\n" +
+    "  function summarizeLegs(legs){\n" +
+    "    if (!Array.isArray(legs) || legs.length === 0) return '（無明細）';\n" +
+    "    return legs.map(function(l){\n" +
+    "      if (!l) return '';\n" +
+    "      if (l.mode === 'WALK') return '步行';\n" +
+    "      if (l.route) return (l.mode + ' ' + l.route);\n" +
+    "      return l.mode || '';\n" +
+    "    }).filter(Boolean).join(' → ');\n" +
+    "  }\n\n" +
+    "  function render(result){\n" +
+    "    raw.textContent = JSON.stringify(result, null, 2);\n\n" +
+    "    const lines = [];\n" +
+    "    lines.push('最佳次序（總時間約 ' + result.totalMin + ' 分鐘）');\n" +
+    "    lines.push('');\n" +
+    "    (result.order||[]).forEach(function(name, idx){\n" +
+    "      lines.push((idx+1) + ') ' + name);\n" +
+    "    });\n" +
+    "    lines.push('');\n" +
+    "    lines.push('每段：');\n\n" +
+    "    const segs = result.segments || [];\n" +
+    "    for (const seg of segs) {\n" +
+    "      lines.push('');\n" +
+    "      lines.push('• ' + seg.from + ' → ' + seg.to + '（約 ' + seg.durationMin + ' 分鐘）');\n" +
+    "      lines.push('  ' + summarizeLegs(seg.legs));\n" +
+    "      if (Array.isArray(seg.legs) && seg.legs.length) {\n" +
+    "        for (const l of seg.legs) {\n" +
+    "          const label = (l.mode === 'WALK') ? '步行' : (l.route ? (l.mode + ' ' + l.route) : (l.mode||''));\n" +
+    "          lines.push('    - ' + label + '：' + secToMin(l.durationSec) + ' 分');\n" +
+    "        }\n" +
+    "      }\n" +
+    "    }\n\n" +
+    "    out.textContent = lines.join('\\n');\n" +
+    "  }\n\n" +
+    "  btn.onclick = async function(){\n" +
+    "    try {\n" +
+    "      btn.disabled = true;\n" +
+    "      out.textContent = '計算中…（第一次可能較慢，約 10–60 秒）';\n" +
+    "      raw.textContent = '';\n" +
+    "      const origin = document.getElementById('origin').value.trim() || 'Wong Tai Sin Station, Hong Kong';\n" +
+    "      const dest = document.getElementById('dest').value.split(/\\n+/).map(function(s){return s.trim();}).filter(Boolean);\n" +
+    "      if (dest.length !== 5) {\n" +
+    "        out.textContent = '請輸入 5 個地點（每行一個）。目前：' + dest.length;\n" +
+    "        return;\n" +
+    "      }\n" +
+    "      const res = await fetch('/api/optimize', {\n" +
+    "        method: 'POST',\n" +
+    "        headers: { 'Content-Type': 'application/json' },\n" +
+    "        body: JSON.stringify({ origin: origin, destinations: dest })\n" +
+    "      });\n" +
+    "      const text = await res.text();\n" +
+    "      if (!res.ok) {\n" +
+    "        out.textContent = 'API error ' + res.status + ':\\n' + text;\n" +
+    "        return;\n" +
+    "      }\n" +
+    "      render(JSON.parse(text));\n" +
+    "    } catch (e) {\n" +
+    "      out.textContent = '前端錯誤：' + (e && e.stack ? e.stack : e);\n" +
+    "    } finally {\n" +
+    "      btn.disabled = false;\n" +
+    "    }\n" +
+    "  };\n" +
+    "})();\n"
+  );
+});
 
 app.post('/api/optimize', async (req, res) => {
   try {
