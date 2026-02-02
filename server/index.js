@@ -9,7 +9,15 @@ const OTP_BASE_URL = process.env.OTP_BASE_URL || 'http://localhost:8080';
 const NOMINATIM_BASE_URL = process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
 const MTR_GTFS_URL = process.env.MTR_GTFS_URL || 'https://feed.justusewheels.com/hk.gtfs.zip';
 
-const mtr = new MtrRouter({ gtfsUrl: MTR_GTFS_URL, waitSec: Number(process.env.MTR_WAIT_SEC || 180) });
+const mtr = new MtrRouter({
+  gtfsUrl: MTR_GTFS_URL,
+  waitSec: Number(process.env.MTR_WAIT_SEC || 120),
+  xferSec: Number(process.env.MTR_XFER_SEC || 120),
+  tstEtsSec: Number(process.env.MTR_TST_ETS_SEC || 420)
+});
+
+const MTR_PENALTY_SEC = Number(process.env.MTR_PENALTY_SEC || 180); // discourage all-MTR solutions
+
 
 // Simple, static UI
 app.get('/', (_req, res) => {
@@ -265,7 +273,7 @@ app.post('/api/optimize', async (req, res) => {
       '尖沙咀碼頭': 'Tsim Sha Tsui Ferry Pier, Hong Kong',
       '觀塘 apm': 'apm Kwun Tong, Hong Kong',
       '觀塘APM': 'apm Kwun Tong, Hong Kong',
-      '藍田匯景': 'Laguna City, Hong Kong'
+      '藍田匯景': 'Sceneway Garden, Lam Tin, Hong Kong'
     };
 
     // Geocode all points (rate-limit friendly)
@@ -302,13 +310,23 @@ app.post('/api/optimize', async (req, res) => {
         // 2) MTR fallback (only if both have stationId)
         if (points[i].stationId && points[j].stationId) {
           try {
-            const p2 = await mtr.plan({
+            const p2raw = await mtr.plan({
               from: { lat: points[i].lat, lon: points[i].lon },
               to: { lat: points[j].lat, lon: points[j].lon },
               fromStationCode: points[i].stationId,
               toStationCode: points[j].stationId
             });
-            if (p2 && (!bestPlan || p2.durationSec < bestPlan.durationSec)) bestPlan = p2;
+            if (p2raw) {
+              // Apply penalty so the optimizer won't choose MTR for every leg unless it's clearly faster.
+              const extra = MTR_PENALTY_SEC + (
+                // Prefer 215X-ish cross-harbour bus from Lam Tin area to TST/ETS
+                ((points[i].stationId === 'LAT' && points[j].stationId === 'ETS') || (points[i].stationId === 'ETS' && points[j].stationId === 'LAT'))
+                  ? 300
+                  : 0
+              );
+              const p2 = { ...p2raw, durationSec: p2raw.durationSec + extra };
+              if (!bestPlan || p2.durationSec < bestPlan.durationSec) bestPlan = p2;
+            }
           } catch (_e) {
             // ignore
           }

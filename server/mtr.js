@@ -19,9 +19,11 @@ function walkSeconds(from, to, speedMps = 1.2) {
 }
 
 export class MtrRouter {
-  constructor({ gtfsUrl, waitSec = 180 } = {}) {
+  constructor({ gtfsUrl, waitSec = 180, xferSec = 120, tstEtsSec = 600 } = {}) {
     this.gtfsUrl = gtfsUrl;
     this.waitSec = waitSec;
+    this.xferSec = xferSec;
+    this.tstEtsSec = tstEtsSec;
     this._loaded = false;
     this._stops = new Map(); // stop_id -> {name, lat, lon}
     this._platformsByCode = new Map(); // code -> [stop_id]
@@ -106,7 +108,7 @@ export class MtrRouter {
     }
 
     // Add in-station transfers between platforms (connect lines at the same station code)
-    const XFER_SEC = 120;
+    const XFER_SEC = this.xferSec;
     for (const [code, ids] of this._platformsByCode.entries()) {
       for (let i=0;i<ids.length;i++) {
         for (let j=0;j<ids.length;j++) {
@@ -117,7 +119,7 @@ export class MtrRouter {
     }
 
     // Special pedestrian linkage: TST <-> ETS (Tsim Sha Tsui <-> East Tsim Sha Tsui)
-    const WALKWAY_SEC = 600;
+    const WALKWAY_SEC = this.tstEtsSec;
     const tst = this._platformsByCode.get('TST') || [];
     const ets = this._platformsByCode.get('ETS') || [];
     for (const a of tst) for (const b of ets) {
