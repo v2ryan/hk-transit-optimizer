@@ -69,8 +69,8 @@ const FIXED_STATIONS = {
   '匯景花園': 'LAT',
   '藍田匯景': 'LAT',
 
-  '尖沙咀碼頭': 'TST',
-  'Tsim Sha Tsui Ferry Pier, Hong Kong': 'TST',
+  '尖沙咀碼頭': 'ETS',
+  'Tsim Sha Tsui Ferry Pier, Hong Kong': 'ETS',
 
   '沙田好運中心': 'SHT',
   'Lucky Plaza, Sha Tin, Hong Kong': 'SHT',

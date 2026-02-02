@@ -101,9 +101,28 @@ export class MtrRouter {
         const dt = b.arrSec - a.depSec;
         if (!(dt > 0 && dt < 3600)) continue;
         addEdge(this._edges, a.stopId, b.stopId, dt);
-        // also add reverse with same weight as fallback (some feeds may only be one-directional per trip)
         addEdge(this._edges, b.stopId, a.stopId, dt);
       }
+    }
+
+    // Add in-station transfers between platforms (connect lines at the same station code)
+    const XFER_SEC = 120;
+    for (const [code, ids] of this._platformsByCode.entries()) {
+      for (let i=0;i<ids.length;i++) {
+        for (let j=0;j<ids.length;j++) {
+          if (i===j) continue;
+          addEdge(this._edges, ids[i], ids[j], XFER_SEC);
+        }
+      }
+    }
+
+    // Special pedestrian linkage: TST <-> ETS (Tsim Sha Tsui <-> East Tsim Sha Tsui)
+    const WALKWAY_SEC = 600;
+    const tst = this._platformsByCode.get('TST') || [];
+    const ets = this._platformsByCode.get('ETS') || [];
+    for (const a of tst) for (const b of ets) {
+      addEdge(this._edges, a, b, WALKWAY_SEC);
+      addEdge(this._edges, b, a, WALKWAY_SEC);
     }
 
     this._loaded = true;
