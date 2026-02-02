@@ -42,7 +42,7 @@ app.get('/', (_req, res) => {
       btn.disabled = true;
       out.textContent='計算中…（第一次可能較慢，約 10–60 秒）';
       const origin=document.getElementById('origin').value.trim() || 'Wong Tai Sin Station, Hong Kong';
-      const dest=document.getElementById('dest').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+      const dest=document.getElementById('dest').value.split(/\\n+/).map(s=>s.trim()).filter(Boolean);
       if (dest.length !== 5) {
         out.textContent = '請輸入 5 個地點（每行一個）。目前：' + dest.length;
         return;
