@@ -54,7 +54,7 @@ app.get('/', (_req, res) => {
       });
       const text = await res.text();
       if (!res.ok) {
-        out.textContent = `API error ${res.status}:\n` + text;
+        out.textContent = 'API error ' + res.status + ':\n' + text;
         return;
       }
       out.textContent = JSON.stringify(JSON.parse(text), null, 2);
