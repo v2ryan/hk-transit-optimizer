@@ -54,28 +54,29 @@ app.get('/', (_req, res) => {
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
 const FIXED_STATIONS = {
-  'Wong Tai Sin Station, Hong Kong': 'MTR-WTS',
-  '黃大仙': 'MTR-WTS',
-  '黃大仙站': 'MTR-WTS',
-  '黃大仙站A2': 'MTR-WTS',
+  // MTR station codes (used to select platform stops in GTFS)
+  'Wong Tai Sin Station, Hong Kong': 'WTS',
+  '黃大仙': 'WTS',
+  '黃大仙站': 'WTS',
+  '黃大仙站A2': 'WTS',
 
-  'apm, Kwun Tong, Hong Kong': 'MTR-KWT',
-  'apm, Kwun Tong': 'MTR-KWT',
-  '觀塘 apm': 'MTR-KWT',
+  'apm, Kwun Tong, Hong Kong': 'KWT',
+  'apm, Kwun Tong': 'KWT',
+  '觀塘 apm': 'KWT',
 
-  'Sceneway Garden, Lam Tin, Hong Kong': 'MTR-LAT',
-  'Sceneway Garden, Lam Tin': 'MTR-LAT',
-  '匯景花園': 'MTR-LAT',
-  '藍田匯景': 'MTR-LAT',
+  'Sceneway Garden, Lam Tin, Hong Kong': 'LAT',
+  'Sceneway Garden, Lam Tin': 'LAT',
+  '匯景花園': 'LAT',
+  '藍田匯景': 'LAT',
 
-  '尖沙咀碼頭': 'MTR-TST',
-  'Tsim Sha Tsui Ferry Pier, Hong Kong': 'MTR-TST',
+  '尖沙咀碼頭': 'TST',
+  'Tsim Sha Tsui Ferry Pier, Hong Kong': 'TST',
 
-  '沙田好運中心': 'MTR-SHT',
-  'Lucky Plaza, Sha Tin, Hong Kong': 'MTR-SHT',
+  '沙田好運中心': 'SHT',
+  'Lucky Plaza, Sha Tin, Hong Kong': 'SHT',
 
-  '大埔中心': 'MTR-TAP',
-  'Tai Po Centre, Hong Kong': 'MTR-TAP'
+  '大埔中心': 'TAP',
+  'Tai Po Centre, Hong Kong': 'TAP'
 };
 
 async function geocode(q) {
@@ -304,8 +305,8 @@ app.post('/api/optimize', async (req, res) => {
             const p2 = await mtr.plan({
               from: { lat: points[i].lat, lon: points[i].lon },
               to: { lat: points[j].lat, lon: points[j].lon },
-              fromStopId: points[i].stationId,
-              toStopId: points[j].stationId
+              fromStationCode: points[i].stationId,
+              toStationCode: points[j].stationId
             });
             if (p2 && (!bestPlan || p2.durationSec < bestPlan.durationSec)) bestPlan = p2;
           } catch (_e) {

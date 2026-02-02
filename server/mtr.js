@@ -24,6 +24,7 @@ export class MtrRouter {
     this.waitSec = waitSec;
     this._loaded = false;
     this._stops = new Map(); // stop_id -> {name, lat, lon}
+    this._platformsByCode = new Map(); // code -> [stop_id]
     this._edges = new Map(); // fromStop -> Map(toStop -> sec)
   }
 
@@ -48,14 +49,23 @@ export class MtrRouter {
     const stopTimes = await readCsv('stop_times.txt');
     const stops = await readCsv('stops.txt');
 
-    // Build stop map (MTR only)
+    // Build stop map (MTR only) + platform index by station code
     for (const s of stops) {
-      if (!String(s.stop_id || '').startsWith('MTR-')) continue;
-      this._stops.set(s.stop_id, {
+      const id = String(s.stop_id || '');
+      if (!id.startsWith('MTR-')) continue;
+      this._stops.set(id, {
         name: s.stop_name,
         lat: Number(s.stop_lat),
         lon: Number(s.stop_lon)
       });
+      // Platform stop_id format: MTR-PLATFORM-<CODE>-<N>
+      const m = id.match(/^MTR-PLATFORM-([A-Z0-9]+)-\d+$/);
+      if (m) {
+        const code = m[1];
+        const arr = this._platformsByCode.get(code) || [];
+        arr.push(id);
+        this._platformsByCode.set(code, arr);
+      }
     }
 
     // Identify rail routes: route_type=1 (subway/rail)
@@ -99,32 +109,53 @@ export class MtrRouter {
     this._loaded = true;
   }
 
-  // Compute MTR travel time between two points by snapping to nearest MTR stop (or provided stopIds)
-  async plan({ from, to, fromStopId, toStopId }) {
+  // Compute MTR travel time between two points.
+  // Prefer station codes (select platform stops), otherwise fall back to nearest platform stop.
+  async plan({ from, to, fromStationCode, toStationCode }) {
     await this.load();
 
-    const fromStop = fromStopId ? this._stops.get(fromStopId) : nearestStop(this._stops, from);
-    const toStop = toStopId ? this._stops.get(toStopId) : nearestStop(this._stops, to);
-    if (!fromStop || !toStop) return null;
+    const fromCandidates = fromStationCode ? (this._platformsByCode.get(fromStationCode) || []) : [];
+    const toCandidates = toStationCode ? (this._platformsByCode.get(toStationCode) || []) : [];
 
-    const fromId = fromStopId || fromStop._id;
-    const toId = toStopId || toStop._id;
+    let fromIds = fromCandidates;
+    let toIds = toCandidates;
 
-    const walk1 = from ? walkSeconds(from, {lat: fromStop.lat, lon: fromStop.lon}) : 0;
-    const walk2 = to ? walkSeconds({lat: toStop.lat, lon: toStop.lon}, to) : 0;
+    if (!fromIds.length) {
+      const ns = nearestStop(this._stops, from);
+      fromIds = ns ? [ns._id] : [];
+    }
+    if (!toIds.length) {
+      const ns = nearestStop(this._stops, to);
+      toIds = ns ? [ns._id] : [];
+    }
 
-    const rail = dijkstra(this._edges, fromId, toId);
-    if (rail == null) return null;
+    if (!fromIds.length || !toIds.length) return null;
 
-    const total = walk1 + this.waitSec + rail + walk2;
-    return {
-      durationSec: total,
-      legs: [
-        { mode: 'WALK', route: null, from: 'Origin', to: fromStop.name || fromId, durationSec: walk1 },
-        { mode: 'MTR', route: 'MTR', from: fromStop.name || fromId, to: toStop.name || toId, durationSec: this.waitSec + rail },
-        { mode: 'WALK', route: null, from: toStop.name || toId, to: 'Destination', durationSec: walk2 }
-      ]
-    };
+    let best = null;
+    for (const a of fromIds) {
+      for (const b of toIds) {
+        const rail = dijkstra(this._edges, a, b);
+        if (rail == null) continue;
+        const fromStop = this._stops.get(a);
+        const toStop = this._stops.get(b);
+        if (!fromStop || !toStop) continue;
+        const walk1 = from ? walkSeconds(from, {lat: fromStop.lat, lon: fromStop.lon}) : 0;
+        const walk2 = to ? walkSeconds({lat: toStop.lat, lon: toStop.lon}, to) : 0;
+        const total = walk1 + this.waitSec + rail + walk2;
+        if (!best || total < best.durationSec) {
+          best = {
+            durationSec: total,
+            legs: [
+              { mode: 'WALK', route: null, from: 'Origin', to: fromStop.name || a, durationSec: walk1 },
+              { mode: 'MTR', route: 'MTR', from: fromStop.name || a, to: toStop.name || b, durationSec: this.waitSec + rail },
+              { mode: 'WALK', route: null, from: toStop.name || b, to: 'Destination', durationSec: walk2 }
+            ]
+          };
+        }
+      }
+    }
+
+    return best;
   }
 }
 
