@@ -38,12 +38,31 @@ app.get('/', (_req, res) => {
   const btn=document.getElementById('btn');
   const out=document.getElementById('out');
   btn.onclick=async()=>{
-    out.textContent='計算中…（第一次可能較慢）';
-    const origin=document.getElementById('origin').value.trim() || 'Wong Tai Sin Station, Hong Kong';
-    const dest=document.getElementById('dest').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
-    const res=await fetch('/api/optimize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({origin, destinations: dest})});
-    const json=await res.json();
-    out.textContent=JSON.stringify(json,null,2);
+    try {
+      btn.disabled = true;
+      out.textContent='計算中…（第一次可能較慢，約 10–60 秒）';
+      const origin=document.getElementById('origin').value.trim() || 'Wong Tai Sin Station, Hong Kong';
+      const dest=document.getElementById('dest').value.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+      if (dest.length !== 5) {
+        out.textContent = '請輸入 5 個地點（每行一個）。目前：' + dest.length;
+        return;
+      }
+      const res=await fetch('/api/optimize',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({origin, destinations: dest})
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        out.textContent = `API error ${res.status}:\n` + text;
+        return;
+      }
+      out.textContent = JSON.stringify(JSON.parse(text), null, 2);
+    } catch (e) {
+      out.textContent = '前端錯誤：' + (e?.stack || e);
+    } finally {
+      btn.disabled = false;
+    }
   };
 </script>
 </body>
