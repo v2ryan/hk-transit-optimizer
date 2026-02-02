@@ -49,6 +49,31 @@ app.get('/', (_req, res) => {
 
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 
+const FIXED_POINTS = {
+  // Prefer GTFS/MTR station coordinates to ensure OTP can snap to transit network
+  'Wong Tai Sin Station, Hong Kong': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
+  '黃大仙': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
+  '黃大仙站': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
+  '黃大仙站A2': { lat: 22.341677, lon: 114.193871, display: 'MTR Wong Tai Sin (GTFS)' },
+
+  'apm, Kwun Tong, Hong Kong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (GTFS, for apm)' },
+  'apm, Kwun Tong': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (GTFS, for apm)' },
+  '觀塘 apm': { lat: 22.312086, lon: 114.226501, display: 'MTR Kwun Tong (GTFS, for apm)' },
+
+  'Sceneway Garden, Lam Tin, Hong Kong': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
+  'Sceneway Garden, Lam Tin': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
+  '匯景花園': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
+  '藍田匯景': { lat: 22.306829, lon: 114.232735, display: 'MTR Lam Tin (GTFS, for Sceneway Garden)' },
+
+  'Lucky Plaza, Sha Tin, Hong Kong': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (GTFS, for Lucky Plaza)' },
+  'Lucky Plaza, Sha Tin': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (GTFS, for Lucky Plaza)' },
+  '沙田好運中心': { lat: 22.382126, lon: 114.186913, display: 'MTR Sha Tin (GTFS, for Lucky Plaza)' },
+
+  'Tai Po Centre, Hong Kong': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (GTFS, for Tai Po Centre)' },
+  'Tai Po Centre, Tai Po': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (GTFS, for Tai Po Centre)' },
+  '大埔中心': { lat: 22.444582, lon: 114.170395, display: 'MTR Tai Po Market (GTFS, for Tai Po Centre)' }
+};
+
 async function geocode(q) {
   const url = new URL('/search', NOMINATIM_BASE_URL);
   url.searchParams.set('format', 'json');
@@ -72,13 +97,19 @@ async function geocode(q) {
   };
 }
 
+async function resolvePoint(label, query) {
+  const fixed = FIXED_POINTS[label] || FIXED_POINTS[query];
+  if (fixed) return { lat: fixed.lat, lon: fixed.lon, display: fixed.display };
+  return geocode(query);
+}
+
 async function otpPlan(from, to) {
   // OTP /plan
   const url = new URL('/otp/routers/default/plan', OTP_BASE_URL);
   url.searchParams.set('fromPlace', `${from.lat},${from.lon}`);
   url.searchParams.set('toPlace', `${to.lat},${to.lon}`);
   url.searchParams.set('mode', 'WALK,TRANSIT');
-  url.searchParams.set('numItineraries', '1');
+  url.searchParams.set('numItineraries', '5');
   // Use a daytime time-of-day to avoid "no service" (e.g. early morning)
   const now = new Date();
   url.searchParams.set('date', now.toISOString().slice(0,10));
@@ -87,8 +118,10 @@ async function otpPlan(from, to) {
   const res = await fetch(url);
   const json = await res.json();
   if (!res.ok) throw new Error(`otp plan failed: ${res.status} ${JSON.stringify(json).slice(0,200)}`);
-  const itin = json?.plan?.itineraries?.[0];
-  if (!itin) throw new Error(`otp no itinerary`);
+  const itins = json?.plan?.itineraries || [];
+  if (!itins.length) throw new Error(`otp no itinerary`);
+  // Pick the fastest itinerary
+  const itin = itins.reduce((best, cur) => (!best || cur.duration < best.duration ? cur : best), null);
   return {
     durationSec: itin.duration,
     legs: itin.legs?.map(l => ({
@@ -224,7 +257,7 @@ app.post('/api/optimize', async (req, res) => {
     const points = [];
     for (const label of labels) {
       const q = ALIASES[label] || label;
-      const p = await geocode(q);
+      const p = await resolvePoint(label, q);
       points.push({ label, query: q, ...p });
       await sleep(350); // be gentle to Nominatim
     }
