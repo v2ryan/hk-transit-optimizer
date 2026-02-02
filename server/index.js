@@ -82,10 +82,10 @@ async function otpPlan(from, to) {
   url.searchParams.set('toPlace', `${to.lat},${to.lon}`);
   url.searchParams.set('mode', 'WALK,TRANSIT');
   url.searchParams.set('numItineraries', '1');
-  // Use current time (OTP needs a date/time)
+  // Use a daytime time-of-day to avoid "no service" (e.g. early morning)
   const now = new Date();
   url.searchParams.set('date', now.toISOString().slice(0,10));
-  url.searchParams.set('time', now.toTimeString().slice(0,5));
+  url.searchParams.set('time', '12:00');
 
   const res = await fetch(url);
   const json = await res.json();
