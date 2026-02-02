@@ -1,5 +1,9 @@
 data/osm/*.pbf
 data/gtfs/*.zip
+/data/*.zip
+/data/*.pbf
+/data/graph.obj*
+/data/otp-config.json
 otp/graph/
 server/node_modules/
 .DS_Store
