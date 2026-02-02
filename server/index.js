@@ -263,6 +263,17 @@ app.post('/api/optimize', async (req, res) => {
       return res.status(400).json({error: 'Need origin + exactly 5 destinations'});
     }
 
+    // Guard against duplicates (common copy/paste issue)
+    const counts = new Map();
+    for (const d of destinations) counts.set(d, (counts.get(d) || 0) + 1);
+    const dups = [...counts.entries()].filter(([,c]) => c > 1);
+    if (dups.length) {
+      return res.status(400).json({
+        error: 'Destinations must be 5 UNIQUE places (no duplicates).',
+        duplicates: dups.map(([k,c]) => ({ place: k, count: c }))
+      });
+    }
+
     const ALIASES = {
       // Start
       '黃大仙站A2': 'Wong Tai Sin Station, Hong Kong',
